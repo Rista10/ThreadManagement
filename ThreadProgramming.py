@@ -28,6 +28,7 @@ class Customer:
     def __init__(self, id, arrival_time, burst_time):
         self.id = id
         self.arrival_time = arrival_time
+        self.initial_burst_time = burst_time
         self.burst_time = burst_time
         self.start_service_time = 0
         self.completion_time = 0
@@ -64,7 +65,7 @@ def calculate_total_time(customer):
     global total_waiting_time, total_turnaround_time, total_response_time
 
     turnaround_time = customer.completion_time - customer.arrival_time
-    waiting_time = turnaround_time-customer.burst_time
+    waiting_time = turnaround_time-customer.initial_burst_time
     response_time = customer.start_service_time - customer.arrival_time
 
     print(f" Customer: {customer.id} Turn around time:{turnaround_time} , Waiting time:{waiting_time} , Response time:{response_time}")
@@ -120,8 +121,6 @@ def plot_average_time_and_teller_service_data(avg_times):
     plt.legend()
     plt.grid(True)
     plt.show()
-
-
 
 
 
@@ -203,35 +202,66 @@ def teller_psjf(id):
                 customer.start_service_time = time.time()
 
             print(f"Customer {customer.id} is in Teller {id} for {customer.burst_time} seconds")
-            customers_served_by_teller[id].append(customer_id)
-            while(burst_time>0):
+            customers_served_by_teller[id].append(customer.id)
+
+            while(customer.burst_time>0):
                 time.sleep(1)
-                burst_time-=1
-                teller_service_data[id].append((customer_id, time.time(), time.time() + 1))
+                customer.burst_time-=1
+
+                teller_service_data[id].append((customer.id, time.time(), time.time() + 1))
+
                 if not customer_queue_sjf.empty():
                     with customer_queue_lock:
                         new_burst_time,new_customer_id,new_customer=customer_queue_sjf.get()
-                    if new_burst_time<burst_time:
+
+                    if new_burst_time<customer.burst_time:
                         with customer_queue_lock:
-                            customer_queue_sjf.put((burst_time,customer_id,customer))
+                            customer_queue_sjf.put((customer.burst_time,customer_id,customer))
+
+                        print(f"Customer{customer_id} preempted by Customer{new_customer_id}")
+
                         customer_id=new_customer_id
                         customer=new_customer
                         burst_time=new_burst_time
-                        break
                     else:
                         with customer_queue_lock:
                             customer_queue_sjf.put((new_burst_time,new_customer_id,new_customer))
             
-            if burst_time<=0:
+            if customer.burst_time<=0:
                 customer.completion_time = time.time()
                 print(f"Customer {customer.id} leaves Teller {id}")
-
                 calculate_total_time(customer)
 
-    
 
 if __name__ == "__main__":
-    algorithm=input("Enter the scheduling algorithm you want to use(fcfs,sjf,psjf,rr): ")
+
+    print("Select the scheduling algorithm you want to use:")
+    print("1: fcfs")
+    print("2: rr")
+    print("3: sjf")
+    print("4: psjf")
+    algorithm_choice = input()
+
+    algorithm_map = {
+        '1': 'fcfs',
+        '2': 'rr',
+        '3': 'sjf',
+        '4': 'psjf'
+    }
+
+    if algorithm_choice == "1":
+        print("Using FCFS Algorithm")
+    elif algorithm_choice == "2":
+        print("Using Round Robin Algorithm")
+    elif algorithm_choice == "3":
+        print("Using SJF Algorithm")
+    elif algorithm_choice == "4":
+        print("Using Preemitive SJF Algorithm")
+    else:
+        print("Invalid Selection")
+        exit()
+
+    algorithm = algorithm_map.get(algorithm_choice, None)
 
     if algorithm in ['fcfs','rr']:
         customer_generator=threading.Thread(target=customer_arrival,args=(customer_queue,))

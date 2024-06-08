@@ -32,6 +32,9 @@ class Customer:
         self.burst_time = burst_time
         self.start_service_time = 0
         self.completion_time = 0
+    
+    def __str__(self) -> str:
+        return f"Customer {self.id} \n Arrival Time: {self.arrival_time} \n Burst Time: {self.burst_time} \n Start Service Time: {self.start_service_time} \n Completion Time: {self.completion_time}"
 
 # Function to generate random burst time
 def generate_random_burst_time():
@@ -62,6 +65,7 @@ def customer_arrival(queue_type):
         time.sleep(1)
 
 def calculate_total_time(customer):
+    print(customer)
     global total_waiting_time, total_turnaround_time, total_response_time
 
     turnaround_time = customer.completion_time - customer.arrival_time
@@ -72,7 +76,7 @@ def calculate_total_time(customer):
 
     total_turnaround_time += turnaround_time
     total_waiting_time += waiting_time
-    total_response_time += response_time
+    total_response_time += abs(response_time)
 
 def calculate_average_time():
     avg_waiting_time = total_waiting_time / total_customers
@@ -192,11 +196,12 @@ def teller_sjf(id):
 
             calculate_total_time(customer)
 
+
 def teller_psjf(id):
-    while not stop_simulation.is_set() or customer_queue_sjf.empty():
+    while not stop_simulation.is_set() or not customer_queue_sjf.empty():
         if not customer_queue_sjf.empty():
             with customer_queue_lock:
-                burst_time,customer_id, customer = customer_queue_sjf.get()
+                _, customer_id, customer = customer_queue_sjf.get()
 
             if customer.start_service_time == 0:
                 customer.start_service_time = time.time()
@@ -204,30 +209,23 @@ def teller_psjf(id):
             print(f"Customer {customer.id} is in Teller {id} for {customer.burst_time} seconds")
             customers_served_by_teller[id].append(customer.id)
 
-            while(customer.burst_time>0):
+            while customer.burst_time > 0:
                 time.sleep(1)
-                customer.burst_time-=1
+                customer.burst_time -= 1
 
                 teller_service_data[id].append((customer.id, time.time(), time.time() + 1))
 
-                if not customer_queue_sjf.empty():
-                    with customer_queue_lock:
-                        new_burst_time,new_customer_id,new_customer=customer_queue_sjf.get()
+                with customer_queue_lock:
+                    if not customer_queue_sjf.empty():
+                        # Peek at the next customer without removing it
+                        next_burst_time, _, _ = customer_queue_sjf.queue[0]
+                        if next_burst_time < customer.burst_time:
+                            # Preempt current customer
+                            customer_queue_sjf.put((customer.burst_time, customer_id, customer))
+                            print(f"Customer {customer_id} preempted by another customer")
+                            break
 
-                    if new_burst_time<customer.burst_time:
-                        with customer_queue_lock:
-                            customer_queue_sjf.put((customer.burst_time,customer_id,customer))
-
-                        print(f"Customer{customer_id} preempted by Customer{new_customer_id}")
-
-                        customer_id=new_customer_id
-                        customer=new_customer
-                        burst_time=new_burst_time
-                    else:
-                        with customer_queue_lock:
-                            customer_queue_sjf.put((new_burst_time,new_customer_id,new_customer))
-            
-            if customer.burst_time<=0:
+            if customer.burst_time <= 0:
                 customer.completion_time = time.time()
                 print(f"Customer {customer.id} leaves Teller {id}")
                 calculate_total_time(customer)
